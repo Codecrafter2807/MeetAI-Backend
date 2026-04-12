@@ -81,6 +81,8 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin-allow-popups"
+
 CORS_ALLOW_ALL_ORIGINS = True
 
 from corsheaders.defaults import default_headers
