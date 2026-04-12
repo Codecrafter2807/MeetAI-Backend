@@ -1,0 +1,4 @@
+Django>=6.0,<7
+djangorestframework>=3.15
+requests>=2.31
+openai-whisper>=20230000
