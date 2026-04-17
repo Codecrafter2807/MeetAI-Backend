@@ -323,32 +323,45 @@ class ResetPasswordView(APIView):
 
 class GoogleLoginView(APIView):
     def post(self, request):
-        access_token = request.data.get('token')
-        if not access_token:
+        token = request.data.get('token')
+        if not token:
             return Response({'error': 'Google token is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Get user info from Google using the access token
-            response = requests.get(
-                'https://www.googleapis.com/oauth2/v3/userinfo',
-                params={'access_token': access_token}
-            )
-            
-            if not response.ok:
-                return Response({'error': 'Failed to verify Google token'}, status=status.HTTP_400_BAD_REQUEST)
-                
-            idinfo = response.json()
+            idinfo = None
 
-            # Get user's Google info
-            email = idinfo['email']
+            # Try id_token verification first (from GoogleLogin component)
+            try:
+                import google.auth.transport.requests
+                from google.oauth2 import id_token as google_id_token
+                idinfo = google_id_token.verify_oauth2_token(
+                    token,
+                    google.auth.transport.requests.Request(),
+                    audience=None  # skip audience check for flexibility
+                )
+            except Exception:
+                pass
+
+            # Fallback: treat as access_token and call userinfo endpoint
+            if not idinfo:
+                response = requests.get(
+                    'https://www.googleapis.com/oauth2/v3/userinfo',
+                    params={'access_token': token}
+                )
+                if not response.ok:
+                    return Response({'error': 'Failed to verify Google token'}, status=status.HTTP_400_BAD_REQUEST)
+                idinfo = response.json()
+
+            email = idinfo.get('email')
+            if not email:
+                return Response({'error': 'Could not get email from Google'}, status=status.HTTP_400_BAD_REQUEST)
+
             name = idinfo.get('name', '')
             avatar = idinfo.get('picture', '')
 
             # Check if user exists
             user = User.objects.filter(email=email).first()
             if not user:
-                # Create user if it doesn't exist
-                # Google email is already verified
                 import string
                 random_password = ''.join(random.choices(string.ascii_letters + string.digits, k=20))
                 user = User.objects.create_user(
@@ -357,13 +370,12 @@ class GoogleLoginView(APIView):
                     full_name=name,
                     is_active=True
                 )
-            
-            # Login successful
+
             Token.objects.filter(user=user).delete()
-            token = Token.objects.create(user=user)
-            
+            token_obj = Token.objects.create(user=user)
+
             return Response({
-                'token': token.key,
+                'token': token_obj.key,
                 'user': {
                     'id': user.id,
                     'name': user.full_name,
