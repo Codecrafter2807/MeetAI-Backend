@@ -72,6 +72,11 @@ def process_meeting(self, meeting_id):
             meeting.status = "failed"
             meeting.save()
             return
+            
+        # Cache the diarization result for Step 2
+        if "diarization" in result:
+            cache_key = f"diarization_{audio_path.replace(' ', '_')}"
+            cache.set(cache_key, result["diarization"], timeout=300)
 
         whisper_raw_segments = result.get("segments") or []
         Transcript.objects.update_or_create(
